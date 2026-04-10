@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Target Trial Emulation Meta-Analysis</title>
+<meta name="description" content="Browser-based meta-analysis combining RCTs with target trial emulations. Stratified pooling, ROBINS-I quality weighting, interaction testing.">
+<meta property="og:title" content="Target Trial Emulation Meta-Analysis">
+<meta property="og:description" content="Stratified pooling of RCTs and target trial emulations with ROBINS-I quality weighting.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a;--card:rgba(20,28,50,0.7);--glass:rgba(40,55,95,0.35);
+  --border:rgba(100,140,255,0.18);--text:#e0e6f0;--muted:#8090b0;
+  --accent:#4fc3f7;--accent2:#7c4dff;--green:#66bb6a;--red:#ef5350;
+  --orange:#ffa726;--yellow:#ffee58;--rct-color:#4fc3f7;--tte-color:#ab47bc;
+  --radius:12px;--shadow:0 8px 32px rgba(0,0,0,0.4);
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+.app-header{text-align:center;padding:2rem 1rem 1rem;background:linear-gradient(135deg,rgba(20,30,60,0.9),rgba(40,20,70,0.8));border-bottom:1px solid var(--border)}
+.app-header h1{font-size:1.8rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-weight:700}
+.app-header p{color:var(--muted);font-size:0.95rem;margin-top:0.3rem}
+.container{max-width:1400px;margin:0 auto;padding:1.5rem}
+.glass{background:var(--glass);border:1px solid var(--border);border-radius:var(--radius);backdrop-filter:blur(12px);box-shadow:var(--shadow)}
+.panel{padding:1.5rem;margin-bottom:1.5rem}
+.panel h2{font-size:1.2rem;margin-bottom:1rem;color:var(--accent)}
+.panel h3{font-size:1.05rem;margin-bottom:0.8rem;color:var(--text)}
+label{display:block;font-size:0.85rem;color:var(--muted);margin-bottom:0.3rem;font-weight:500}
+textarea{width:100%;background:rgba(10,14,26,0.6);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.8rem;font-family:'Consolas','Courier New',monospace;font-size:0.8rem;resize:vertical;line-height:1.5}
+textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(79,195,247,0.2)}
+select{background:rgba(10,14,26,0.6);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.8rem;font-size:0.9rem;cursor:pointer}
+select:focus{outline:none;border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:0.4rem;padding:0.6rem 1.2rem;border:none;border-radius:8px;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-primary:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.btn-secondary{background:rgba(255,255,255,0.08);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{background:rgba(255,255,255,0.14)}
+.btn-group{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.8rem}
+.controls-row{display:flex;gap:1rem;align-items:flex-end;flex-wrap:wrap;margin-bottom:1rem}
+.controls-row>div{flex:0 0 auto}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+.svg-container{width:100%;overflow-x:auto;background:rgba(0,0,0,0.2);border-radius:8px;padding:0.5rem}
+.svg-container svg{display:block;margin:0 auto}
+table{width:100%;border-collapse:collapse;font-size:0.85rem}
+th{text-align:left;padding:0.6rem 0.8rem;background:rgba(255,255,255,0.05);color:var(--accent);font-weight:600;border-bottom:1px solid var(--border)}
+td{padding:0.5rem 0.8rem;border-bottom:1px solid rgba(255,255,255,0.04)}
+tr:hover td{background:rgba(255,255,255,0.03)}
+.badge{display:inline-block;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.75rem;font-weight:600}
+.badge-low{background:rgba(102,187,106,0.2);color:var(--green)}
+.badge-moderate{background:rgba(255,167,38,0.2);color:var(--orange)}
+.badge-serious{background:rgba(239,83,80,0.2);color:var(--red)}
+.badge-critical{background:rgba(239,83,80,0.4);color:#ff8a80}
+.stat-card{text-align:center;padding:1rem;background:rgba(0,0,0,0.15);border-radius:8px}
+.stat-card .value{font-size:1.5rem;font-weight:700;color:var(--accent)}
+.stat-card .label{font-size:0.8rem;color:var(--muted);margin-top:0.2rem}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem}
+.hidden{display:none}
+.interaction-result{padding:1rem;border-radius:8px;margin-top:1rem;font-size:0.9rem}
+.interaction-sig{background:rgba(239,83,80,0.15);border:1px solid rgba(239,83,80,0.3)}
+.interaction-nonsig{background:rgba(102,187,106,0.15);border:1px solid rgba(102,187,106,0.3)}
+.no-data-msg{color:var(--muted);font-style:italic;padding:1rem;text-align:center}
+#results-section{display:none}
+.sensitivity-row{display:flex;gap:2rem;align-items:center;padding:0.6rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.sensitivity-label{min-width:140px;font-weight:600;font-size:0.9rem}
+.sensitivity-value{font-size:0.9rem}
+.downweight-list{margin-top:0.8rem;font-size:0.85rem;color:var(--muted)}
+.downweight-list li{margin-bottom:0.3rem}
+.export-section{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <h1>Target Trial Emulation Meta-Analysis</h1>
+  <p>Stratified pooling of RCTs and target trial emulations with ROBINS-I quality weighting</p>
+</header>
+
+<div class="container">
+  <!-- Input Panel -->
+  <div class="glass panel" id="input-panel">
+    <h2>Data Input</h2>
+    <label for="csv-input">CSV Data (Study, Design, LogEffect, SE, ROBINS_I, C1-C8)</label>
+    <textarea id="csv-input" rows="14" placeholder="Paste CSV here or click Demo Data..."></textarea>
+    <div class="controls-row">
+      <div>
+        <label for="effect-select">Effect Measure</label>
+        <select id="effect-select">
+          <option value="HR" selected>Hazard Ratio (HR)</option>
+          <option value="OR">Odds Ratio (OR)</option>
+          <option value="RR">Risk Ratio (RR)</option>
+        </select>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="btn-demo" onclick="loadDemo()">Demo Data</button>
+        <button class="btn btn-primary" id="btn-analyze" onclick="runAnalysis()">Analyze</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="results-section">
+    <!-- Summary Stats -->
+    <div class="stat-grid" id="stat-grid"></div>
+
+    <!-- Forest Plot -->
+    <div class="glass panel">
+      <h2>Stratified Forest Plot</h2>
+      <div class="svg-container" id="forest-container"></div>
+      <div id="interaction-result"></div>
+    </div>
+
+    <!-- Quality Heatmap + Sensitivity side by side -->
+    <div class="grid-2">
+      <div class="glass panel">
+        <h2>Target Trial Checklist Heatmap</h2>
+        <div class="svg-container" id="heatmap-container"></div>
+      </div>
+      <div class="glass panel">
+        <h2>ROBINS-I Sensitivity Analysis</h2>
+        <div id="sensitivity-container"></div>
+        <div class="svg-container" id="sensitivity-forest-container"></div>
+      </div>
+    </div>
+
+    <!-- Summary Table -->
+    <div class="glass panel">
+      <h2>Summary Table</h2>
+      <div id="summary-table-container"></div>
+    </div>
+
+    <!-- Export -->
+    <div class="glass panel">
+      <h2>Export</h2>
+      <div class="btn-group">
+        <button class="btn btn-secondary" onclick="exportCSV()">Export Summary CSV</button>
+        <button class="btn btn-secondary" onclick="exportForestSVG()">Export Forest Plot SVG</button>
+        <button class="btn btn-secondary" onclick="exportHeatmapSVG()">Export Heatmap SVG</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ========== DEMO DATA ========== */
+const DEMO_CSV = `Study,Design,LogEffect,SE,ROBINS_I,C1,C2,C3,C4,C5,C6,C7,C8
+DAPA-HF 2019,RCT,-0.26,0.07,Low,1,1,1,1,1,1,1,1
+EMPEROR-Reduced 2020,RCT,-0.25,0.08,Low,1,1,1,1,1,1,1,1
+SOLOIST-WHF 2021,RCT,-0.33,0.11,Low,1,1,1,1,1,1,1,1
+DELIVER 2022,RCT,-0.18,0.06,Low,1,1,1,1,1,1,1,1
+Patorno 2022,TTE,-0.22,0.09,Low,1,1,1,1,1,1,1,1
+Udell 2022,TTE,-0.30,0.12,Moderate,1,1,0,1,1,1,1,0
+Shin 2023,TTE,-0.15,0.10,Moderate,1,1,1,0,1,1,0,1
+Khera 2023,TTE,-0.28,0.11,Serious,1,0,0,1,1,1,0,0
+Li 2023,TTE,-0.35,0.14,Moderate,1,1,1,1,0,1,1,0
+Wang 2024,TTE,-0.20,0.13,Serious,1,0,0,0,1,1,0,0`;
+
+function loadDemo() {
+  document.getElementById('csv-input').value = DEMO_CSV;
+}
+
+/* ========== CSV PARSER ========== */
+function parseCSV(text) {
+  const lines = text.trim().split('\n').map(l => l.trim()).filter(l => l);
+  if (lines.length < 2) return [];
+  const header = lines[0].split(',').map(h => h.trim());
+  const studies = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = lines[i].split(',').map(v => v.trim());
+    if (vals.length < 4) continue;
+    const study = {
+      name: vals[0],
+      design: vals[1].toUpperCase(),
+      logEffect: parseFloat(vals[2]),
+      se: parseFloat(vals[3]),
+      robinsI: (vals.length > 4 && vals[4]) ? vals[4] : (vals[1].toUpperCase() === 'RCT' ? 'Low' : 'Low'),
+      checklist: []
+    };
+    if (study.design === 'RCT' && (!vals[4] || vals[4] === '')) study.robinsI = 'Low';
+    for (let c = 5; c < 13; c++) {
+      study.checklist.push(vals.length > c ? parseInt(vals[c]) || 0 : 0);
+    }
+    if (isFinite(study.logEffect) && isFinite(study.se) && study.se > 0) {
+      studies.push(study);
+    }
+  }
+  return studies;
+}
+
+/* ========== STATISTICAL FUNCTIONS ========== */
+
+// Chi-square CDF (regularized incomplete gamma)
+function gammln(x) {
+  const c = [76.18009172947146,-86.50532032941677,24.01409824083091,
+    -1.231739572450155,0.1208650973866179e-2,-0.5395239384953e-5];
+  let y = x, tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  let ser = 1.000000000190015;
+  for (let j = 0; j < 6; j++) ser += c[j] / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+
+function gammaIncomplete(a, x) {
+  // Series expansion for lower incomplete gamma / Gamma(a)
+  if (x < 0) return 0;
+  if (x === 0) return 0;
+  if (x < a + 1) {
+    // Series
+    let sum = 1/a, term = 1/a;
+    for (let n = 1; n < 200; n++) {
+      term *= x / (a + n);
+      sum += term;
+      if (Math.abs(term) < Math.abs(sum) * 1e-14) break;
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - gammln(a));
+  } else {
+    // Continued fraction
+    let f = 1e-30, c = 1e-30, d = 0;
+    for (let i = 1; i < 200; i++) {
+      const an = (i % 2 === 1) ? (Math.floor(i/2) + 1 - a) : Math.floor(i/2);
+      const bn = (i % 2 === 1) ? 1 : x;
+      if (i === 1) { d = x + 1 - a; if (Math.abs(d) < 1e-30) d = 1e-30; c = x + 1 - a; if (Math.abs(c) < 1e-30) c = 1e-30; }
+    }
+    // Use Lentz for upper gamma
+    let b0 = x + 1 - a, a0 = 1;
+    f = b0; if (Math.abs(f) < 1e-30) f = 1e-30;
+    c = f; d = 0;
+    for (let i = 1; i < 200; i++) {
+      const ai = i * (a - i);
+      const bi = x + 2*i + 1 - a;
+      d = bi + ai * d; if (Math.abs(d) < 1e-30) d = 1e-30;
+      c = bi + ai / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+      d = 1/d;
+      const delta = c * d;
+      f *= delta;
+      if (Math.abs(delta - 1) < 1e-14) break;
+    }
+    return 1 - f * Math.exp(-x + a * Math.log(x) - gammln(a));
+  }
+}
+
+function chi2CDF(x, df) {
+  if (x <= 0) return 0;
+  return gammaIncomplete(df/2, x/2);
+}
+
+// t-distribution CDF via regularized incomplete beta
+function betaCF(a, b, x) {
+  const maxIter = 200;
+  let qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < 1e-30) d = 1e-30;
+  d = 1/d;
+  let h = d;
+  for (let m = 1; m <= maxIter; m++) {
+    let m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30;
+    c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    d = 1/d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < 1e-30) d = 1e-30;
+    c = 1 + aa / c; if (Math.abs(c) < 1e-30) c = 1e-30;
+    d = 1/d;
+    let delta = d * c;
+    h *= delta;
+    if (Math.abs(delta - 1) < 1e-14) break;
+  }
+  return h;
+}
+
+function betaInc(a, b, x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(gammln(a+b) - gammln(a) - gammln(b) + a*Math.log(x) + b*Math.log(1-x));
+  if (x < (a+1)/(a+b+2)) {
+    return bt * betaCF(a, b, x) / a;
+  } else {
+    return 1 - bt * betaCF(b, a, 1-x) / b;
+  }
+}
+
+function tCDF(t, df) {
+  const x = df / (df + t*t);
+  const ib = betaInc(df/2, 0.5, x);
+  return t >= 0 ? 1 - 0.5*ib : 0.5*ib;
+}
+
+// Inverse t-distribution (bisection)
+function tQuantile(p, df) {
+  // For p < 0.5, result is negative
+  if (p === 0.5) return 0;
+  const sign = p < 0.5 ? -1 : 1;
+  const target = p < 0.5 ? p : 1 - p;
+  let lo = 0, hi = 1000;
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2;
+    const cdf = tCDF(-mid, df); // probability in left tail
+    if (cdf < target) hi = mid; else lo = mid;
+    if (hi - lo < 1e-10) break;
+  }
+  return sign * (lo + hi) / 2;
+}
+
+/* ========== DerSimonian-Laird RE META-ANALYSIS with HKSJ ========== */
+function metaAnalysisDL(studies) {
+  // studies: [{logEffect, weight}] where weight = 1/se^2 (or adjusted)
+  const k = studies.length;
+  if (k === 0) return null;
+
+  const effects = studies.map(s => s.logEffect);
+  const weights = studies.map(s => s.weight);
+
+  // Fixed-effect estimate
+  const sumW = weights.reduce((a,b) => a+b, 0);
+  const thetaFE = weights.reduce((s,w,i) => s + w*effects[i], 0) / sumW;
+
+  if (k === 1) {
+    const se = Math.sqrt(1/weights[0]);
+    // Use t-distribution with df = k-1 = 0... fallback to normal for k=1
+    const z = 1.959964;
+    return {
+      theta: effects[0], se: se,
+      ci: [effects[0] - z*se, effects[0] + z*se],
+      tau2: 0, I2: 0, Q: 0, df: 0, pQ: 1, k: 1
+    };
+  }
+
+  // Q statistic
+  const Q = weights.reduce((s,w,i) => s + w*(effects[i]-thetaFE)**2, 0);
+  const df = k - 1;
+  const pQ = 1 - chi2CDF(Q, df);
+
+  // DL tau2
+  const C = sumW - weights.reduce((s,w) => s + w*w, 0)/sumW;
+  let tau2 = Math.max(0, (Q - df) / C);
+
+  // RE weights
+  const reWeights = studies.map(s => 1/(1/s.weight + tau2));
+  const sumWre = reWeights.reduce((a,b) => a+b, 0);
+  const thetaRE = reWeights.reduce((s,w,i) => s + w*effects[i], 0) / sumWre;
+
+  // I2
+  const I2 = Math.max(0, (Q - df) / Q) * 100;
+
+  // HKSJ adjustment
+  // Variance: q* = (1/(k-1)) * sum(w_i * (y_i - theta_RE)^2) / sumW_re
+  // But use floor: max(1, Q/(k-1)) scaling
+  const qStar = reWeights.reduce((s,w,i) => s + w*(effects[i]-thetaRE)**2, 0) / df;
+  // HKSJ floor: if Q < k-1, qStar can be < 1/sumWre, narrowing CI below DL
+  // Apply floor: max(1, qStar)
+  const hksjFactor = Math.max(1, qStar);
+  const seRE = Math.sqrt(hksjFactor / sumWre);
+
+  // t-distribution CI (HKSJ uses t_{k-1})
+  const tCrit = -tQuantile(0.025, df); // positive critical value
+  const ci = [thetaRE - tCrit * seRE, thetaRE + tCrit * seRE];
+
+  return {
+    theta: thetaRE, se: seRE, ci: ci,
+    tau2: tau2, I2: I2, Q: Q, df: df, pQ: pQ, k: k,
+    weights: reWeights
+  };
+}
+
+/* ========== ROBINS-I WEIGHT MULTIPLIERS ========== */
+function robinsIMultiplier(judgment) {
+  const j = judgment.trim().toLowerCase();
+  if (j === 'low') return 1.0;
+  if (j === 'moderate') return 0.75;
+  if (j === 'serious') return 0.50;
+  if (j === 'critical') return 0.0;
+  return 1.0;
+}
+
+/* ========== MAIN ANALYSIS ========== */
+let lastResults = null;
+
+function runAnalysis() {
+  const csv = document.getElementById('csv-input').value;
+  const effectLabel = document.getElementById('effect-select').value;
+  const studies = parseCSV(csv);
+
+  if (studies.length === 0) {
+    alert('No valid studies found. Check CSV format.');
+    return;
+  }
+
+  // Separate by design
+  const rctStudies = studies.filter(s => s.design === 'RCT');
+  const tteStudies = studies.filter(s => s.design === 'TTE');
+
+  // Prepare for MA: inverse-variance weights
+  const allForMA = studies.map(s => ({...s, weight: 1/(s.se*s.se)}));
+  const rctForMA = rctStudies.map(s => ({...s, weight: 1/(s.se*s.se)}));
+  const tteForMA = tteStudies.map(s => ({...s, weight: 1/(s.se*s.se)}));
+
+  // Pool
+  const rctResult = rctForMA.length > 0 ? metaAnalysisDL(rctForMA) : null;
+  const tteResult = tteForMA.length > 0 ? metaAnalysisDL(tteForMA) : null;
+  const combinedResult = metaAnalysisDL(allForMA);
+
+  // Interaction test: Q_between = Q_total - Q_within_RCT - Q_within_TTE
+  let interactionQ = null, interactionP = null;
+  if (rctResult && tteResult && rctResult.k >= 1 && tteResult.k >= 1) {
+    const qWithinRCT = rctResult.Q;
+    const qWithinTTE = tteResult.Q;
+    // Total Q from combined
+    const qTotal = combinedResult.Q;
+    interactionQ = qTotal - qWithinRCT - qWithinTTE;
+    // Clamp to 0 (can be slightly negative due to different tau2)
+    if (interactionQ < 0) interactionQ = 0;
+    interactionP = 1 - chi2CDF(interactionQ, 1);
+  }
+
+  // ROBINS-I adjusted analysis
+  const adjustedStudies = studies.filter(s => robinsIMultiplier(s.robinsI) > 0);
+  const adjustedForMA = adjustedStudies.map(s => ({
+    ...s,
+    weight: (1/(s.se*s.se)) * robinsIMultiplier(s.robinsI)
+  }));
+  const adjustedResult = adjustedForMA.length > 0 ? metaAnalysisDL(adjustedForMA) : null;
+
+  // Collect downweighted/excluded studies
+  const downweighted = studies.filter(s => {
+    const m = robinsIMultiplier(s.robinsI);
+    return m > 0 && m < 1;
+  });
+  const excluded = studies.filter(s => robinsIMultiplier(s.robinsI) === 0);
+
+  lastResults = {
+    studies, rctStudies, tteStudies, effectLabel,
+    rctResult, tteResult, combinedResult,
+    interactionQ, interactionP,
+    adjustedResult, downweighted, excluded,
+    adjustedStudies
+  };
+
+  renderResults(lastResults);
+  document.getElementById('results-section').style.display = 'block';
+}
+
+/* ========== RENDERING ========== */
+function fmt(val, dec) { return val.toFixed(dec !== undefined ? dec : 2); }
+function expFmt(logVal, dec) { return Math.exp(logVal).toFixed(dec !== undefined ? dec : 2); }
+function effectStr(result, label) {
+  if (!result) return 'N/A';
+  return `${label} ${expFmt(result.theta)} [${expFmt(result.ci[0])}, ${expFmt(result.ci[1])}]`;
+}
+
+function renderResults(R) {
+  renderStatGrid(R);
+  renderForestPlot(R);
+  renderInteraction(R);
+  renderHeatmap(R);
+  renderSensitivity(R);
+  renderSummaryTable(R);
+}
+
+function renderStatGrid(R) {
+  const el = R.effectLabel;
+  const cards = [
+    { value: R.studies.length, label: 'Total Studies' },
+    { value: R.rctStudies.length, label: 'RCT Studies' },
+    { value: R.tteStudies.length, label: 'TTE Studies' },
+    { value: R.combinedResult ? expFmt(R.combinedResult.theta) : 'N/A', label: `Combined ${el}` },
+    { value: R.interactionP !== null ? (R.interactionP < 0.001 ? '<0.001' : fmt(R.interactionP, 3)) : 'N/A', label: 'Interaction p' },
+    { value: R.combinedResult ? fmt(R.combinedResult.I2, 1) + '%' : 'N/A', label: 'I\u00B2 Overall' }
+  ];
+  document.getElementById('stat-grid').innerHTML = cards.map(c =>
+    `<div class="stat-card"><div class="value">${c.value}</div><div class="label">${c.label}</div></div>`
+  ).join('');
+}
+
+/* ========== FOREST PLOT ========== */
+function renderForestPlot(R) {
+  const el = R.effectLabel;
+  const studies = R.studies;
+  const margin = { top: 30, right: 220, bottom: 50, left: 200 };
+
+  // Collect all CIs to determine x-range (on log scale)
+  let allLogVals = [];
+  studies.forEach(s => {
+    const ci95lo = s.logEffect - 1.96 * s.se;
+    const ci95hi = s.logEffect + 1.96 * s.se;
+    allLogVals.push(ci95lo, ci95hi, s.logEffect);
+  });
+  [R.rctResult, R.tteResult, R.combinedResult].forEach(r => {
+    if (r) { allLogVals.push(r.ci[0], r.ci[1], r.theta); }
+  });
+
+  const logMin = Math.min(...allLogVals) - 0.1;
+  const logMax = Math.max(...allLogVals) + 0.1;
+
+  // Row layout
+  const rowH = 26;
+  let rows = [];
+  let y = 0;
+
+  // RCT section
+  rows.push({ type: 'header', label: 'RCT Studies', y: y }); y += rowH;
+  if (R.rctStudies.length === 0) {
+    rows.push({ type: 'message', label: 'No RCT studies', y: y }); y += rowH;
+  } else {
+    R.rctStudies.forEach(s => {
+      rows.push({ type: 'study', study: s, design: 'RCT', y: y }); y += rowH;
+    });
+    rows.push({ type: 'diamond', result: R.rctResult, label: `RCT Pooled`, design: 'RCT', y: y }); y += rowH;
+  }
+
+  y += 8; // gap
+
+  // TTE section
+  rows.push({ type: 'header', label: 'TTE Studies', y: y }); y += rowH;
+  if (R.tteStudies.length === 0) {
+    rows.push({ type: 'message', label: 'No TTE studies', y: y }); y += rowH;
+  } else {
+    R.tteStudies.forEach(s => {
+      rows.push({ type: 'study', study: s, design: 'TTE', y: y }); y += rowH;
+    });
+    rows.push({ type: 'diamond', result: R.tteResult, label: `TTE Pooled`, design: 'TTE', y: y }); y += rowH;
+  }
+
+  y += 8;
+  rows.push({ type: 'diamond', result: R.combinedResult, label: 'Overall', design: 'combined', y: y }); y += rowH;
+
+  const width = 900;
+  const height = margin.top + y + margin.bottom;
+  const plotW = width - margin.left - margin.right;
+
+  // x scale: log values to pixels
+  function xScale(logVal) {
+    return margin.left + (logVal - logMin) / (logMax - logMin) * plotW;
+  }
+
+  let svg = `<svg id="forest-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="font-family:Segoe UI,system-ui,sans-serif">`;
+  svg += `<rect width="${width}" height="${height}" fill="#0d1220" rx="8"/>`;
+
+  // x-axis ticks (on natural/exp scale)
+  const nullLine = xScale(0); // log(1) = 0
+  svg += `<line x1="${nullLine}" y1="${margin.top}" x2="${nullLine}" y2="${margin.top + y}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+  // Generate nice tick values on exp scale
+  const expMin = Math.exp(logMin), expMax = Math.exp(logMax);
+  let ticks = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.5, 2.0];
+  ticks = ticks.filter(t => t >= expMin * 0.95 && t <= expMax * 1.05);
+  if (ticks.length < 3) ticks = [expMin, 1, expMax];
+
+  const axisY = margin.top + y + 5;
+  ticks.forEach(t => {
+    const x = xScale(Math.log(t));
+    if (x >= margin.left && x <= margin.left + plotW) {
+      svg += `<line x1="${x}" y1="${axisY}" x2="${x}" y2="${axisY+6}" stroke="#666" stroke-width="1"/>`;
+      svg += `<text x="${x}" y="${axisY+20}" text-anchor="middle" fill="#8090b0" font-size="11">${t.toFixed(t>=1?1:2)}</text>`;
+    }
+  });
+  svg += `<line x1="${margin.left}" y1="${axisY}" x2="${margin.left+plotW}" y2="${axisY}" stroke="#666" stroke-width="1"/>`;
+  svg += `<text x="${width/2}" y="${axisY+38}" text-anchor="middle" fill="#8090b0" font-size="12">Favours Treatment \u2190 ${el} \u2192 Favours Control</text>`;
+
+  // Render rows
+  rows.forEach(row => {
+    const cy = margin.top + row.y + rowH/2;
+
+    if (row.type === 'header') {
+      svg += `<text x="10" y="${cy+5}" fill="${row.label.includes('RCT') ? '#4fc3f7' : '#ab47bc'}" font-size="13" font-weight="bold">${escHtml(row.label)}</text>`;
+      svg += `<line x1="${margin.left}" y1="${cy+12}" x2="${margin.left+plotW}" y2="${cy+12}" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>`;
+    }
+    else if (row.type === 'message') {
+      svg += `<text x="20" y="${cy+4}" fill="#8090b0" font-size="11" font-style="italic">${escHtml(row.label)}</text>`;
+    }
+    else if (row.type === 'study') {
+      const s = row.study;
+      const color = row.design === 'RCT' ? '#4fc3f7' : '#ab47bc';
+      const ci95lo = s.logEffect - 1.96 * s.se;
+      const ci95hi = s.logEffect + 1.96 * s.se;
+      const xMid = xScale(s.logEffect);
+      const xLo = xScale(ci95lo);
+      const xHi = xScale(ci95hi);
+      // Weight for square size (inverse variance)
+      const w = 1 / (s.se * s.se);
+      const maxW = Math.max(...studies.map(st => 1/(st.se*st.se)));
+      const sz = 4 + 8 * (w / maxW);
+
+      svg += `<text x="${margin.left-10}" y="${cy+4}" text-anchor="end" fill="#c0c8d8" font-size="11">${escHtml(s.name)}</text>`;
+      svg += `<line x1="${Math.max(margin.left,xLo)}" y1="${cy}" x2="${Math.min(margin.left+plotW,xHi)}" y2="${cy}" stroke="${color}" stroke-width="1.5"/>`;
+      if (xLo >= margin.left) svg += `<line x1="${xLo}" y1="${cy-3}" x2="${xLo}" y2="${cy+3}" stroke="${color}" stroke-width="1.5"/>`;
+      if (xHi <= margin.left + plotW) svg += `<line x1="${xHi}" y1="${cy-3}" x2="${xHi}" y2="${cy+3}" stroke="${color}" stroke-width="1.5"/>`;
+      svg += `<rect x="${xMid-sz/2}" y="${cy-sz/2}" width="${sz}" height="${sz}" fill="${color}" stroke="none"/>`;
+
+      // Right side: effect [CI]
+      const hrStr = `${expFmt(s.logEffect)} [${expFmt(ci95lo)}, ${expFmt(ci95hi)}]`;
+      svg += `<text x="${margin.left+plotW+10}" y="${cy+4}" fill="#c0c8d8" font-size="10">${hrStr}</text>`;
+    }
+    else if (row.type === 'diamond') {
+      const r = row.result;
+      if (!r) return;
+      const color = row.design === 'RCT' ? '#4fc3f7' : row.design === 'TTE' ? '#ab47bc' : '#ffa726';
+      const xMid = xScale(r.theta);
+      const xLo = xScale(r.ci[0]);
+      const xHi = xScale(r.ci[1]);
+      const dh = 7;
+
+      svg += `<text x="${margin.left-10}" y="${cy+4}" text-anchor="end" fill="${color}" font-size="11" font-weight="bold">${escHtml(row.label)}</text>`;
+      const clampLo = Math.max(margin.left, xLo);
+      const clampHi = Math.min(margin.left + plotW, xHi);
+      svg += `<polygon points="${clampLo},${cy} ${xMid},${cy-dh} ${clampHi},${cy} ${xMid},${cy+dh}" fill="${color}" opacity="0.6" stroke="${color}" stroke-width="1"/>`;
+
+      const hrStr = `${expFmt(r.theta)} [${expFmt(r.ci[0])}, ${expFmt(r.ci[1])}]`;
+      svg += `<text x="${margin.left+plotW+10}" y="${cy+4}" fill="${color}" font-size="10" font-weight="bold">${hrStr}</text>`;
+    }
+  });
+
+  svg += `</svg>`;
+  document.getElementById('forest-container').innerHTML = svg;
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ========== INTERACTION TEST DISPLAY ========== */
+function renderInteraction(R) {
+  const el = document.getElementById('interaction-result');
+  if (R.interactionQ === null) {
+    el.innerHTML = '<div class="no-data-msg">Interaction test requires both RCT and TTE studies.</div>';
+    return;
+  }
+  const sig = R.interactionP < 0.05;
+  const cls = sig ? 'interaction-sig' : 'interaction-nonsig';
+  const pStr = R.interactionP < 0.001 ? '<0.001' : fmt(R.interactionP, 3);
+  const verdict = sig
+    ? 'Evidence of difference between RCT and TTE estimates (p < 0.05).'
+    : 'No evidence of difference between RCT and TTE estimates (p >= 0.05).';
+  el.innerHTML = `<div class="interaction-result ${cls}">
+    <strong>Interaction Test (RCT vs TTE):</strong> Q<sub>between</sub> = ${fmt(R.interactionQ, 2)}, df = 1, p = ${pStr}<br/>
+    ${verdict}
+  </div>`;
+}
+
+/* ========== QUALITY HEATMAP ========== */
+function renderHeatmap(R) {
+  const tteStudies = R.tteStudies;
+  const container = document.getElementById('heatmap-container');
+
+  if (tteStudies.length === 0) {
+    container.innerHTML = '<div class="no-data-msg">No TTE studies to display.</div>';
+    return;
+  }
+
+  const criteria = ['Eligibility','Treatment','Assignment','Time Zero','Follow-up End','Outcomes','Causal Contrast','Analysis Plan'];
+  const cellW = 60, cellH = 30, labelW = 140, robinsW = 80;
+  const headerH = 80;
+  const nRows = tteStudies.length;
+  const nCols = criteria.length;
+  const width = labelW + nCols * cellW + robinsW + 20;
+  const height = headerH + nRows * cellH + 10;
+
+  let svg = `<svg id="heatmap-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="font-family:Segoe UI,system-ui,sans-serif">`;
+  svg += `<rect width="${width}" height="${height}" fill="#0d1220" rx="8"/>`;
+
+  // Column headers (rotated)
+  criteria.forEach((c, i) => {
+    const x = labelW + i * cellW + cellW/2;
+    svg += `<text x="${x}" y="${headerH-8}" text-anchor="end" fill="#8090b0" font-size="10" transform="rotate(-45,${x},${headerH-8})">${c}</text>`;
+  });
+  // ROBINS-I header
+  svg += `<text x="${labelW + nCols*cellW + robinsW/2}" y="${headerH-8}" text-anchor="middle" fill="#8090b0" font-size="10">ROBINS-I</text>`;
+
+  // Rows
+  tteStudies.forEach((s, ri) => {
+    const y = headerH + ri * cellH;
+    // Study name
+    svg += `<text x="${labelW-8}" y="${y+cellH/2+4}" text-anchor="end" fill="#c0c8d8" font-size="11">${escHtml(s.name)}</text>`;
+
+    // Checklist cells
+    s.checklist.forEach((val, ci) => {
+      const x = labelW + ci * cellW;
+      const fill = val === 1 ? 'rgba(102,187,106,0.5)' : 'rgba(239,83,80,0.5)';
+      const stroke = val === 1 ? '#66bb6a' : '#ef5350';
+      svg += `<rect x="${x+2}" y="${y+2}" width="${cellW-4}" height="${cellH-4}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="0.5"/>`;
+      svg += `<text x="${x+cellW/2}" y="${y+cellH/2+4}" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">${val ? 'Yes' : 'No'}</text>`;
+    });
+
+    // ROBINS-I badge
+    const rx = labelW + nCols * cellW + 4;
+    const robinsColor = {low:'#66bb6a',moderate:'#ffa726',serious:'#ef5350',critical:'#ff8a80'}[s.robinsI.toLowerCase()] || '#8090b0';
+    svg += `<rect x="${rx}" y="${y+4}" width="${robinsW-8}" height="${cellH-8}" rx="4" fill="${robinsColor}22" stroke="${robinsColor}" stroke-width="1"/>`;
+    svg += `<text x="${rx+(robinsW-8)/2}" y="${y+cellH/2+4}" text-anchor="middle" fill="${robinsColor}" font-size="10" font-weight="600">${escHtml(s.robinsI)}</text>`;
+  });
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+/* ========== SENSITIVITY PANEL ========== */
+function renderSensitivity(R) {
+  const container = document.getElementById('sensitivity-container');
+  const forestContainer = document.getElementById('sensitivity-forest-container');
+  const el = R.effectLabel;
+
+  let html = '';
+
+  // Unadjusted vs adjusted
+  const unadj = R.combinedResult;
+  const adj = R.adjustedResult;
+
+  html += `<div class="sensitivity-row">
+    <span class="sensitivity-label" style="color:#4fc3f7">Unadjusted:</span>
+    <span class="sensitivity-value">${unadj ? effectStr(unadj, el) : 'N/A'} (k=${unadj ? unadj.k : 0})</span>
+  </div>`;
+  html += `<div class="sensitivity-row">
+    <span class="sensitivity-label" style="color:#ffa726">ROBINS-I Adjusted:</span>
+    <span class="sensitivity-value">${adj ? effectStr(adj, el) : 'N/A'} (k=${adj ? R.adjustedStudies.length : 0})</span>
+  </div>`;
+
+  if (R.downweighted.length > 0 || R.excluded.length > 0) {
+    html += `<div class="downweight-list"><strong>Weight adjustments:</strong><ul>`;
+    R.downweighted.forEach(s => {
+      const m = robinsIMultiplier(s.robinsI);
+      html += `<li>${escHtml(s.name)}: ${s.robinsI} — weight x${m.toFixed(2)}</li>`;
+    });
+    R.excluded.forEach(s => {
+      html += `<li>${escHtml(s.name)}: ${s.robinsI} — <strong>excluded</strong></li>`;
+    });
+    html += `</ul></div>`;
+  }
+
+  container.innerHTML = html;
+
+  // Mini forest with 2 diamonds
+  if (!unadj) { forestContainer.innerHTML = ''; return; }
+
+  const margin = {top:15, right:180, bottom:30, left:160};
+  const rowH = 35;
+  const height = margin.top + 2*rowH + margin.bottom;
+  const width = 600;
+  const plotW = width - margin.left - margin.right;
+
+  let allLog = [];
+  [unadj, adj].forEach(r => { if(r) allLog.push(r.ci[0], r.ci[1], r.theta); });
+  const logMin = Math.min(...allLog) - 0.08;
+  const logMax = Math.max(...allLog) + 0.08;
+  function xS(v) { return margin.left + (v-logMin)/(logMax-logMin)*plotW; }
+
+  let svg = `<svg id="sensitivity-svg" xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="font-family:Segoe UI,system-ui,sans-serif">`;
+  svg += `<rect width="${width}" height="${height}" fill="#0d1220" rx="8"/>`;
+
+  // Null line
+  const nl = xS(0);
+  if (nl >= margin.left && nl <= margin.left + plotW) {
+    svg += `<line x1="${nl}" y1="${margin.top}" x2="${nl}" y2="${margin.top+2*rowH}" stroke="#555" stroke-width="1" stroke-dasharray="4,3"/>`;
+  }
+
+  // Diamonds
+  const diamonds = [
+    { result: unadj, label: 'Unadjusted', color: '#4fc3f7' },
+    { result: adj, label: 'ROBINS-I Adjusted', color: '#ffa726' }
+  ];
+
+  diamonds.forEach((d, i) => {
+    if (!d.result) return;
+    const cy = margin.top + i * rowH + rowH/2;
+    const r = d.result;
+    const xMid = xS(r.theta);
+    const xLo = Math.max(margin.left, xS(r.ci[0]));
+    const xHi = Math.min(margin.left+plotW, xS(r.ci[1]));
+    const dh = 8;
+    svg += `<text x="${margin.left-10}" y="${cy+4}" text-anchor="end" fill="${d.color}" font-size="11" font-weight="bold">${d.label}</text>`;
+    svg += `<polygon points="${xLo},${cy} ${xMid},${cy-dh} ${xHi},${cy} ${xMid},${cy+dh}" fill="${d.color}" opacity="0.5" stroke="${d.color}" stroke-width="1"/>`;
+    const hrStr = `${expFmt(r.theta)} [${expFmt(r.ci[0])}, ${expFmt(r.ci[1])}]`;
+    svg += `<text x="${margin.left+plotW+10}" y="${cy+4}" fill="${d.color}" font-size="10" font-weight="bold">${hrStr}</text>`;
+  });
+
+  svg += `</svg>`;
+  forestContainer.innerHTML = svg;
+}
+
+/* ========== SUMMARY TABLE ========== */
+function renderSummaryTable(R) {
+  const el = R.effectLabel;
+  const rows = [];
+
+  function rowData(label, result, k) {
+    if (!result) return { label, hr:'N/A', ci:'N/A', k: k||0, I2:'N/A', tau2:'N/A' };
+    return {
+      label,
+      hr: expFmt(result.theta),
+      ci: `[${expFmt(result.ci[0])}, ${expFmt(result.ci[1])}]`,
+      k: result.k,
+      I2: fmt(result.I2, 1) + '%',
+      tau2: fmt(result.tau2, 4)
+    };
+  }
+
+  rows.push(rowData(`RCT Pooled ${el}`, R.rctResult, R.rctStudies.length));
+  rows.push(rowData(`TTE Pooled ${el}`, R.tteResult, R.tteStudies.length));
+  rows.push(rowData(`Combined ${el}`, R.combinedResult, R.studies.length));
+  rows.push(rowData(`ROBINS-I Adjusted ${el}`, R.adjustedResult, R.adjustedStudies ? R.adjustedStudies.length : 0));
+
+  let html = `<table id="summary-table">
+    <thead><tr><th>Estimate</th><th>${el}</th><th>95% CI</th><th>k</th><th>I\u00B2</th><th>\u03C4\u00B2</th></tr></thead><tbody>`;
+
+  rows.forEach(r => {
+    html += `<tr><td>${r.label}</td><td>${r.hr}</td><td>${r.ci}</td><td>${r.k}</td><td>${r.I2}</td><td>${r.tau2}</td></tr>`;
+  });
+
+  // Interaction row
+  const pStr = R.interactionP !== null ? (R.interactionP < 0.001 ? '<0.001' : fmt(R.interactionP, 3)) : 'N/A';
+  const qStr = R.interactionQ !== null ? fmt(R.interactionQ, 2) : 'N/A';
+  html += `<tr><td>Interaction (RCT vs TTE)</td><td colspan="2">Q<sub>between</sub> = ${qStr}, p = ${pStr}</td><td>-</td><td>-</td><td>-</td></tr>`;
+
+  html += `</tbody></table>`;
+  document.getElementById('summary-table-container').innerHTML = html;
+}
+
+/* ========== EXPORT ========== */
+function exportCSV() {
+  if (!lastResults) return;
+  const R = lastResults;
+  const el = R.effectLabel;
+  let csv = `Estimate,${el},CI_Lower,CI_Upper,k,I2,tau2\n`;
+
+  function addRow(label, result) {
+    if (!result) { csv += `${label},NA,NA,NA,0,NA,NA\n`; return; }
+    csv += `${label},${expFmt(result.theta)},${expFmt(result.ci[0])},${expFmt(result.ci[1])},${result.k},${fmt(result.I2,1)},${fmt(result.tau2,4)}\n`;
+  }
+
+  addRow('RCT Pooled', R.rctResult);
+  addRow('TTE Pooled', R.tteResult);
+  addRow('Combined', R.combinedResult);
+  addRow('ROBINS-I Adjusted', R.adjustedResult);
+
+  const pStr = R.interactionP !== null ? (R.interactionP < 0.001 ? '<0.001' : fmt(R.interactionP, 3)) : 'NA';
+  csv += `Interaction Q_between,${R.interactionQ !== null ? fmt(R.interactionQ,2) : 'NA'},p=${pStr},,,,\n`;
+
+  downloadBlob(csv, 'target_trial_ma_summary.csv', 'text/csv');
+}
+
+function exportForestSVG() {
+  const svgEl = document.getElementById('forest-svg');
+  if (!svgEl) return;
+  downloadBlob(svgEl.outerHTML, 'forest_plot.svg', 'image/svg+xml');
+}
+
+function exportHeatmapSVG() {
+  const svgEl = document.getElementById('heatmap-svg');
+  if (!svgEl) return;
+  downloadBlob(svgEl.outerHTML, 'quality_heatmap.svg', 'image/svg+xml');
+}
+
+function downloadBlob(content, filename, mime) {
+  const blob = new Blob([content], {type: mime});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
