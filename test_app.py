@@ -16,7 +16,7 @@ import pytest
 # Monkey-patch for Python 3.13 WMI deadlock
 import platform
 if hasattr(platform, "_wmi_query"):
-    platform._wmi_query = lambda *a, **k: None
+    platform._wmi_query = lambda *a, **k: ("", "1", "", "", "")
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -25,8 +25,11 @@ from selenium.webdriver.support import expected_conditions as EC
 
 # ---- Fixtures ----
 
-PORT = 18234
 HTML_DIR = os.path.dirname(os.path.abspath(__file__))
+
+class QuietHTTPServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = False
+    daemon_threads = True
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -35,20 +38,23 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 @pytest.fixture(scope="session")
 def server():
     handler = lambda *a, **k: QuietHandler(*a, directory=HTML_DIR, **k)
-    srv = http.server.HTTPServer(("127.0.0.1", PORT), handler)
+    try:
+        srv = QuietHTTPServer(("127.0.0.1", 8000), handler)
+    except OSError:
+        srv = QuietHTTPServer(("127.0.0.1", 0), handler)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
-    yield f"http://127.0.0.1:{PORT}/index.html"
-    srv.shutdown()
+    try:
+        yield f"http://127.0.0.1:{srv.server_port}/index.html"
+    finally:
+        srv.shutdown()
+        t.join(timeout=5)
+        srv.server_close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def driver(server):
     """Launch headless Chrome."""
-    # Kill orphan chrome/chromedriver
-    if sys.platform == "win32":
-        os.system("taskkill /f /im chromedriver.exe >NUL 2>&1")
-
     opts = webdriver.ChromeOptions()
     opts.add_argument("--headless=new")
     opts.add_argument("--disable-gpu")
