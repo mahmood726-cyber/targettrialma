@@ -186,7 +186,9 @@ function parseCSV(text) {
     };
     if (study.design === 'RCT' && (!vals[4] || vals[4] === '')) study.robinsI = 'Low';
     for (let c = 5; c < 13; c++) {
-      study.checklist.push(vals.length > c ? parseInt(vals[c]) || 0 : 0);
+      // Checklist is binary 0/1; treat only an explicit "1" as met, everything else as 0.
+      const cv = vals.length > c ? parseInt(vals[c], 10) : 0;
+      study.checklist.push(cv === 1 ? 1 : 0);
     }
     if (isFinite(study.logEffect) && isFinite(study.se) && study.se > 0) {
       studies.push(study);
@@ -222,28 +224,25 @@ function gammaIncomplete(a, x) {
     }
     return sum * Math.exp(-x + a * Math.log(x) - gammln(a));
   } else {
-    // Continued fraction
-    let f = 1e-30, c = 1e-30, d = 0;
+    // Continued fraction (Lentz) for the upper incomplete gamma Q(a,x),
+    // following Numerical Recipes `gcf`; lower regularized = 1 - Q.
+    const FPMIN = 1e-300;
+    let b = x + 1 - a;
+    let c = 1 / FPMIN;
+    let d = 1 / b;
+    let h = d;
     for (let i = 1; i < 200; i++) {
-      const an = (i % 2 === 1) ? (Math.floor(i/2) + 1 - a) : Math.floor(i/2);
-      const bn = (i % 2 === 1) ? 1 : x;
-      if (i === 1) { d = x + 1 - a; if (Math.abs(d) < 1e-30) d = 1e-30; c = x + 1 - a; if (Math.abs(c) < 1e-30) c = 1e-30; }
-    }
-    // Use Lentz for upper gamma
-    let b0 = x + 1 - a, a0 = 1;
-    f = b0; if (Math.abs(f) < 1e-30) f = 1e-30;
-    c = f; d = 0;
-    for (let i = 1; i < 200; i++) {
-      const ai = i * (a - i);
-      const bi = x + 2*i + 1 - a;
-      d = bi + ai * d; if (Math.abs(d) < 1e-30) d = 1e-30;
-      c = bi + ai / c; if (Math.abs(c) < 1e-30) c = 1e-30;
-      d = 1/d;
-      const delta = c * d;
-      f *= delta;
+      const an = -i * (i - a);
+      b += 2;
+      d = an * d + b; if (Math.abs(d) < FPMIN) d = FPMIN;
+      c = b + an / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+      d = 1 / d;
+      const delta = d * c;
+      h *= delta;
       if (Math.abs(delta - 1) < 1e-14) break;
     }
-    return 1 - f * Math.exp(-x + a * Math.log(x) - gammln(a));
+    const Q = h * Math.exp(-x + a * Math.log(x) - gammln(a));
+    return 1 - Q;
   }
 }
 

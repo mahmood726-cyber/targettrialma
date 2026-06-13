@@ -47,11 +47,14 @@ Study,Design,LogEffect,SE,ROBINS_I,C1,C2,C3,C4,C5,C6,C7,C8
 ## Testing
 
 ```bash
-cd C:\Models\TargetTrialMA
-python -m pytest test_app.py -v
+# Fast smoke test (no browser required)
+python -m pytest -q
+
+# Full Selenium suite (requires Chrome/Edge + chromedriver)
+RUN_BROWSER_TESTS=1 python -m pytest test_app.py -v
 ```
 
-18 Selenium tests covering pooled estimates, interaction test, ROBINS-I weighting, visualizations, edge cases, and export.
+The Selenium suite (`test_app.py`, 18 tests) covers pooled estimates, the interaction test, ROBINS-I weighting, visualizations, edge cases, and export. A lightweight HTML-shell smoke test (`test_smoke.py`) runs without a browser and is the default; the browser suite is gated behind the `RUN_BROWSER_TESTS` environment variable.
 
 ## Author
 

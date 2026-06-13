@@ -1,6 +1,7 @@
 """
 Target Trial Emulation Meta-Analysis — Selenium test suite.
-Run: cd C:\\Models\\TargetTrialMA && python -m pytest test_app.py -v
+Run (from the repo root): RUN_BROWSER_TESTS=1 python -m pytest test_app.py -v
+The browser suite is gated behind the RUN_BROWSER_TESTS env var (see conftest.py).
 """
 import os
 import sys
